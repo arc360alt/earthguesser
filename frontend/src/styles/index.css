@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: #1a1a2e;
+    color: white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-green hover:bg-green-600 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    z-index: 9999999999990;
+  }
+
+  .btn-secondary {
+    @apply bg-brand-card hover:bg-blue-900 text-white font-semibold px-6 py-2.5 rounded-lg border border-white/10 transition-colors duration-200;
+  }
+
+  .btn-danger {
+    @apply bg-brand-accent hover:bg-red-600 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200;
+  }
+
+  .card {
+    @apply bg-brand-panel rounded-xl border border-white/10 p-6;
+  }
+
+  .input {
+    @apply w-full bg-brand-dark border border-white/20 rounded-lg px-4 py-2.5 text-white placeholder-white/40 focus:outline-none focus:border-brand-green transition-colors;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-white/70 mb-1;
+  }
+}
+
+/* Street View container */
+.street-view-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Leaflet map container */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #1a1a2e;
+  font: inherit;
+}
+
+/* Guess map container */
+.guess-map-container {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
+
+/* Result map container */
+.result-map-container {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  border-radius: 0;
+}
+
+/* Animated score bar fill - sync with 1s timer tick */
+.score-fill {
+  transition: width 0.9s linear;
+}
+
+/* Custom marker */
+.custom-marker {
+  z-index: 100 !important;
+}
+
+/* Pulsing daily badge */
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(76, 175, 80, 0); }
+}
+.pulse-green {
+  animation: pulse-green 2s infinite;
+}

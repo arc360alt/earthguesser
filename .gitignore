@@ -1,0 +1,16 @@
+.env
+bkup.txt
+{backend
+node_modules
+dist
+build
+.DS_Store
+*.log
+*.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+*.db
+*.db-shm
+*.db-wal
