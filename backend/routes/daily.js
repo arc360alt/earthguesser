@@ -20,7 +20,11 @@ async function getOrCreateDailyChallenge(date) {
   if (!daily) {
     const locations = await getLocationsForGame('world', DAILY_ROUNDS);
     const locJson = JSON.stringify(locations);
-    db.prepare('INSERT INTO daily_challenges (date, locations) VALUES (?, ?)').run(date, locJson);
+    try {
+      db.prepare('INSERT INTO daily_challenges (date, locations) VALUES (?, ?)').run(date, locJson);
+    } catch (err) {
+      if (err.code !== 'SQLITE_CONSTRAINT_PRIMARYKEY') throw err;
+    }
     daily = db.prepare('SELECT * FROM daily_challenges WHERE date = ?').get(date);
   }
   return { ...daily, locations: JSON.parse(daily.locations) };

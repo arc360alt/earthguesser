@@ -99,6 +99,16 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      <footer className="bg-brand-panel border-t border-white/10 px-4 py-3 flex items-center justify-between text-xs text-white/40">
+        <div className="flex items-center gap-2">
+          <span>EarthGuesser</span>
+          <span>·</span>
+          <span>© 2026</span>
+        </div>
+        <span>Build #{__BUILD_NUMBER__}</span>
+      </footer>
     </div>
   );
 }

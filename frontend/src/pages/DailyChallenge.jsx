@@ -292,7 +292,7 @@ export default function DailyChallenge() {
         <button
           onClick={() => submitGuess(false)}
           disabled={!guess}
-          className={`z-index-999999 absolute bottom-2 left-2 right-2 py-2 rounded-lg font-bold text-sm transition-all ${
+          className={`z-index-999999999999999999999999 absolute bottom-2 left-2 right-2 py-2 rounded-lg font-bold text-sm transition-all ${
             guess
               ? 'bg-brand-green hover:bg-green-600 text-white shadow-lg'
               : 'bg-white/10 text-white/30 cursor-not-allowed'
