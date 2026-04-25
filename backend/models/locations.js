@@ -41,12 +41,20 @@ async function checkStreetViewCoverage(lat, lng) {
       if (data.location_type === 'indoor') {
         return { found: false };
       }
+      const copyright = data.copyright || '';
+      const isOfficialGoogle = copyright.includes('Google');
+      if (!isOfficialGoogle) {
+        return { found: false };
+      }
       return {
         found: true,
         lat: data.location.lat,
         lng: data.location.lng,
         panoId: data.pano_id || null
       };
+    }
+    if (data.status === 'ZERO_RESULTS') {
+      return { found: false };
     }
     return { found: false };
   } catch (e) {

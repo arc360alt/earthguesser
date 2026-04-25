@@ -1,107 +1,139 @@
 import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import * as maptilersdk from '@maptiler/sdk';
 
-export default function GuessMap({ onGuessChange, disabled = false, showResult = false, actualLat, actualLng, guessLat, guessLng }) {
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
+
+maptilersdk.config.apiKey = MAPTILER_KEY;
+
+export default function GuessMap({ onGuessChange, disabled = false, showResult = false, actualLat, actualLng, guessLat, guessLng, fullscreen = false }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
-  const guessMarkerRef = useRef(null);
+  const markerRef = useRef(null);
   const actualMarkerRef = useRef(null);
   const lineRef = useRef(null);
-  const initializedRef = useRef(false);
-
-  const guessIcon = L.divIcon({
-    className: 'guess-marker',
-    html: '<div style="background:#e94560;width:14px;height:14px;border-radius:50%;border:2px solid white;"></div>',
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
-
-  const actualIcon = L.divIcon({
-    className: 'guess-marker',
-    html: '<div style="background:#4caf50;width:14px;height:14px;border-radius:50%;border:2px solid white;"></div>',
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
+  const [placed, setPlaced] = useState(false);
 
   useEffect(() => {
-    if (initializedRef.current) return;
-    if (!containerRef.current) return;
+    if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current, {
-      center: [20, 0],
-      zoom: 2,
-      zoomControl: false,
-      attributionControl: false,
-      worldCopyJump: true,
-      preferCanvas: true,
-    });
-
-    const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      subdomains: 'abcd',
-      updateWhenIdle: false,
-      updateInterval: 100,
-    }).addTo(map);
-
-    // Preload tiles at zoom 2
-    tileLayer.on('load', () => {
-      map.preloadZoom(3);
+    const map = new maptilersdk.Map({
+      container: containerRef.current,
+      style: maptilersdk.MapStyle.STREETS,
+      zoom: 1,
+      center: [0, 20],
+      navigationControl: false,
+      geolocateControl: false,
     });
 
     mapRef.current = map;
-    initializedRef.current = true;
 
     if (!disabled && !showResult) {
       map.on('click', (e) => {
-        const { lat, lng } = e.latlng;
-        if (guessMarkerRef.current) {
-          guessMarkerRef.current.setLatLng([lat, lng]);
+        const { lng, lat } = e.lngLat;
+
+        if (markerRef.current) {
+          markerRef.current.setLngLat([lng, lat]);
         } else {
-          guessMarkerRef.current = L.marker([lat, lng], { icon: guessIcon }).addTo(map);
+          markerRef.current = new maptilersdk.Marker({ color: '#e94560' })
+            .setLngLat([lng, lat])
+            .addTo(map);
         }
+
+        setPlaced(true);
         onGuessChange?.({ lat, lng });
       });
     }
 
     return () => {
-      initializedRef.current = false;
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
     };
   }, []);
 
+  // Show result lines & markers
   useEffect(() => {
     if (!showResult || !mapRef.current || !actualLat || !actualLng) return;
     const map = mapRef.current;
 
-    if (actualMarkerRef.current) actualMarkerRef.current.remove();
-    actualMarkerRef.current = L.marker([actualLat, actualLng], { icon: actualIcon }).addTo(map);
+    const showOnMap = () => {
+      // Actual location marker (green)
+      if (actualMarkerRef.current) actualMarkerRef.current.remove();
+      actualMarkerRef.current = new maptilersdk.Marker({ color: '#4caf50' })
+        .setLngLat([actualLng, actualLat])
+        .addTo(map);
 
-    if (guessMarkerRef.current) guessMarkerRef.current.remove();
-    if (guessLat && guessLng) {
-      guessMarkerRef.current = L.marker([guessLat, guessLng], { icon: guessIcon }).addTo(map);
+      // Guess marker (red)
+      if (markerRef.current) markerRef.current.remove();
+      if (guessLat && guessLng) {
+        markerRef.current = new maptilersdk.Marker({ color: '#e94560' })
+          .setLngLat([guessLng, guessLat])
+          .addTo(map);
+      }
 
-      if (lineRef.current) lineRef.current.remove();
-      lineRef.current = L.polyline([[guessLat, guessLng], [actualLat, actualLng]], {
-        color: '#ffb300',
-        weight: 2,
-        dashArray: '4, 4',
-      }).addTo(map);
+      // Draw line between guess and actual
+      if (guessLat && guessLng) {
+        const sourceId = 'result-line';
+        if (map.getSource(sourceId)) {
+          map.removeLayer(sourceId);
+          map.removeSource(sourceId);
+        }
 
-      const bounds = L.latLngBounds([
-        [guessLat, guessLng],
-        [actualLat, actualLng],
-      ]);
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+        map.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [guessLng, guessLat],
+                [actualLng, actualLat],
+              ],
+            },
+          },
+        });
+
+        map.addLayer({
+          id: sourceId,
+          type: 'line',
+          source: sourceId,
+          paint: {
+            'line-color': '#ffb300',
+            'line-width': 2,
+            'line-dasharray': [3, 3],
+          },
+        });
+
+        // Fit map to show both points
+        const bounds = new maptilersdk.LngLatBounds(
+          [Math.min(guessLng, actualLng), Math.min(guessLat, actualLat)],
+          [Math.max(guessLng, actualLng), Math.max(guessLat, actualLat)]
+        );
+        map.fitBounds(bounds, { padding: 80, maxZoom: 10, duration: 800 });
+      } else {
+        map.flyTo({ center: [actualLng, actualLat], zoom: 5 });
+      }
+    };
+
+    if (map.loaded()) {
+      showOnMap();
     } else {
-      map.setView([actualLat, actualLng], 5);
+      map.on('load', showOnMap);
     }
   }, [showResult, actualLat, actualLng, guessLat, guessLng]);
 
+  if (!MAPTILER_KEY || MAPTILER_KEY === 'your_maptiler_api_key_here') {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-brand-panel rounded-xl">
+        <p className="text-white/50 text-sm text-center p-4">MapTiler API key not configured</p>
+      </div>
+    );
+  }
+
   return (
-    <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden" style={{ background: '#1a1a2e' }} />
+    <div
+      ref={containerRef}
+      className={`w-full h-full ${showResult ? 'result-map-container' : 'guess-map-container'}`}
+    />
   );
 }
