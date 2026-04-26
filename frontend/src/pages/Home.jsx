@@ -7,9 +7,17 @@ export default function Home() {
   const { user, isLoggedIn } = useAuth();
   const navigate = useNavigate();
   const [dailyInfo, setDailyInfo] = useState(null);
+  const [commitHash, setCommitHash] = useState('');
 
   useEffect(() => {
     api.get('/daily').then((r) => setDailyInfo(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('https://api.github.com/repos/arc360alt/earthguesser/commits')
+      .then((r) => r.json())
+      .then((data) => setCommitHash(data[0]?.sha?.slice(0, 7) || ''))
+      .catch(() => {});
   }, []);
 
   return (
@@ -107,7 +115,7 @@ export default function Home() {
           <span>·</span>
           <span>© 2026</span>
         </div>
-        <span>Build #{__BUILD_NUMBER__}</span>
+        <span>{commitHash && `Build ${commitHash}`}</span>
       </footer>
     </div>
   );

@@ -6,7 +6,4 @@ export default defineConfig({
   server: {
     port: 5173,
   },
-  define: {
-    __BUILD_NUMBER__: "2",
-  },
 });
