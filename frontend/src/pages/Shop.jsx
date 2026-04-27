@@ -55,6 +55,10 @@ export default function Shop() {
 
   return (
     <div className="flex-1 px-4 py-10 max-w-3xl mx-auto w-full">
+      <div className="mb-4 rounded-lg bg-red-500/20 border border-red-500/40 px-4 py-3 text-m text-red-200">
+        ⚠️ Work in progress, most of these items don't work yet!!
+      </div>
+
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-3xl font-bold">Bonus Shop</h1>
         <div className="flex items-center gap-2 bg-brand-panel border border-white/10 rounded-xl px-4 py-2">

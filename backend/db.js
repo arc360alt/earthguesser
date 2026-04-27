@@ -53,6 +53,7 @@ function initDb() {
       actual_lat REAL NOT NULL,
       actual_lng REAL NOT NULL,
       actual_pano_id TEXT,
+      continent TEXT,
       guess_lat REAL,
       guess_lng REAL,
       distance_km REAL,
@@ -72,20 +73,11 @@ function initDb() {
       user_id TEXT NOT NULL,
       date TEXT NOT NULL,
       total_score INTEGER NOT NULL,
-      round_scores TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      region TEXT NOT NULL,
       completed_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(user_id, date),
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS shop_items (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      icon TEXT NOT NULL,
-      cost INTEGER NOT NULL,
-      bonus_type TEXT NOT NULL,
-      bonus_value TEXT NOT NULL
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (date) REFERENCES daily_challenges(date)
     );
 
     CREATE TABLE IF NOT EXISTS user_bonuses (
@@ -93,14 +85,45 @@ function initDb() {
       user_id TEXT NOT NULL,
       bonus_type TEXT NOT NULL,
       bonus_value TEXT NOT NULL,
-      purchased_at TEXT DEFAULT (datetime('now')),
       used INTEGER DEFAULT 0,
+      purchased_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      sid TEXT PRIMARY KEY,
+      sess TEXT NOT NULL,
+      expired TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TEXT DEFAULT (datetime('now'))
     );
   `);
 
+  // Run migrations
+  const migrations = [
+    { name: 'add_continent_to_rounds', sql: 'ALTER TABLE rounds ADD COLUMN continent TEXT' },
+  ];
+
+  const getMigration = db.prepare('SELECT name FROM migrations WHERE name = ?');
+  const setMigration = db.prepare('INSERT INTO migrations (name) VALUES (?)');
+
+  for (const m of migrations) {
+    try {
+      if (!getMigration.get(m.name)) {
+        db.exec(m.sql);
+        setMigration.run(m.name);
+      }
+    } catch (e) {
+      if (!e.message.includes('duplicate column name')) {
+        console.error(`Migration ${m.name} failed:`, e.message);
+      }
+    }
+  }
+
   seedShopItems(db);
-  console.log('Database initialized');
 }
 
 function seedShopItems(db) {

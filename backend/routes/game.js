@@ -37,11 +37,11 @@ router.post('/create', optionalAuth, async (req, res) => {
     `).run(gameId, req.userId || null, validMode, region, validRounds, validTime, activeBonus ? activeBonus.bonus_type : null);
 
     const insertRound = db.prepare(`
-      INSERT INTO rounds (id, game_id, round_number, actual_lat, actual_lng, actual_pano_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO rounds (id, game_id, round_number, actual_lat, actual_lng, actual_pano_id, continent)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     locations.forEach((loc, i) => {
-      insertRound.run(uuidv4(), gameId, i + 1, loc.lat, loc.lng, loc.panoId || null);
+      insertRound.run(uuidv4(), gameId, i + 1, loc.lat, loc.lng, loc.panoId || null, loc.continent);
     });
 
     // Mark bonus as used
@@ -118,9 +118,9 @@ router.post('/:gameId/guess', optionalAuth, (req, res) => {
   let nextRound = null;
   if (!isLastRound) {
     const nr = db
-      .prepare('SELECT round_number, actual_lat, actual_lng, actual_pano_id FROM rounds WHERE game_id = ? AND round_number = ?')
+      .prepare('SELECT round_number, actual_lat, actual_lng, actual_pano_id, continent FROM rounds WHERE game_id = ? AND round_number = ?')
       .get(gameId, nextRoundNum + 1);
-    if (nr) nextRound = { roundNumber: nr.round_number, lat: nr.actual_lat, lng: nr.actual_lng, panoId: nr.actual_pano_id };
+    if (nr) nextRound = { roundNumber: nr.round_number, lat: nr.actual_lat, lng: nr.actual_lng, panoId: nr.actual_pano_id, continent: nr.continent };
   }
 
   res.json({

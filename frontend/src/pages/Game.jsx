@@ -47,6 +47,7 @@ export default function Game() {
         mode: game.mode,
         region: game.region,
         activeBonus: game.active_bonus,
+        continentHint: game.currentRound?.continentHint,
         currentRound: { roundNumber: nextRoundNum, lat: round.actual_lat, lng: round.actual_lng, panoId: round.actual_pano_id },
       });
       setTotalScore(game.total_score);
@@ -118,6 +119,10 @@ export default function Game() {
       lng: result.nextRound.lng,
       panoId: result.nextRound.panoId,
     });
+    setGameData((prev) => ({
+      ...prev,
+      continentHint: result.continentHint,
+    }));
   }
 
   if (loading || !currentRound) {
@@ -145,9 +150,12 @@ export default function Game() {
 
       {/* Top HUD */}
       <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-4">
-        <div className="bg-brand-panel/90 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-2">
+        <div className="bg-brand-panel/90 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-2 flex items-center gap-2">
           <span className="text-white font-semibold">Round {currentRound.roundNumber}</span>
           <span className="text-white/50"> / {gameData?.totalRounds}</span>
+          {gameData?.continentHint && (
+            <span className="ml-2 text-brand-green text-sm">🌍 {gameData.continentHint}</span>
+          )}
         </div>
 
         {hasTimer && (
