@@ -15,7 +15,7 @@ export default function Navbar() {
   return (
     <nav className="bg-brand-panel border-b border-white/10 px-4 py-3 flex items-center justify-between z-50 relative">
       <Link to="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
-        <span className="text-brand-green text-2xl">🌍</span>
+        <img src="/icon.png" alt="EarthGuesser" className="w-8 h-8" />
         <span>Earth<span className="text-brand-green">Guesser</span></span>
       </Link>
 
