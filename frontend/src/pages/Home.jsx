@@ -113,7 +113,7 @@ export default function Home() {
         <div className="flex items-center gap-2">
           <span>EarthGuesser</span>
           <span>·</span>
-          <span>© 2026</span>
+          <span>A geoguesser alternative coded in a weekend.</span>
         </div>
         <span>{commitHash && `Build ${commitHash}`}</span>
       </footer>
