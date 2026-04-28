@@ -22,7 +22,26 @@ const { checkKartaViewCoverage, probeKartaViewAvailability } = require('../utils
 const { checkMapillaryCoverage } = require('../utils/mapillary');
 const { getGameplayStreetViewProvider } = require('../utils/activeStreetview');
 const { sampleKartaViewCandidateLatLng } = require('./kartaviewSeeds');
-const { getCityForRegion, findNearbyCityLocation, MAX_METERS_FROM_CITY } = require('../utils/nominatim');
+const { getCityForRegion, findNearbyCityLocation, MAX_METERS_FROM_CITY, fetchRandomTown } = require('../utils/nominatim');
+const { TOWNS_BY_REGION } = require('../data/towns');
+
+// Track used towns to avoid duplicates within a game session
+const usedTowns = new Map(); // gameId -> Set of town names
+
+function markTownUsed(gameId, townName) {
+  if (!usedTowns.has(gameId)) {
+    usedTowns.set(gameId, new Set());
+  }
+  usedTowns.get(gameId).add(townName);
+}
+
+function isTownUsed(gameId, townName) {
+  return usedTowns.get(gameId)?.has(townName) || false;
+}
+
+function clearUsedTowns(gameId) {
+  usedTowns.delete(gameId);
+}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -74,6 +93,42 @@ async function getRandomStreetViewLocation(region = 'world', maxAttempts, noRand
   const { provider } = await getGameplayStreetViewProvider();
   const attempts = maxAttempts || getMaxAttempts();
 
+  // Use static town list only when "Near Cities & Towns" is enabled
+  if (noRandomLocations) {
+    const towns = TOWNS_BY_REGION[region] || TOWNS_BY_REGION.world;
+    if (towns && towns.length > 0) {
+      // Shuffle and try up to 5 random towns (avoiding duplicates)
+      const gameId = this?.gameId; // Passed from game creation
+      const availableTowns = gameId
+        ? towns.filter(t => !isTownUsed(gameId, t.name))
+        : towns;
+      
+      const shuffled = [...availableTowns].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < Math.min(5, shuffled.length); i++) {
+        const town = shuffled[i];
+        // Add jitter within ~3 miles of the town
+        const jitterKm = Math.random() * MAX_METERS_FROM_CITY / 1000;
+        const offsetLat = (jitterKm / 111) * (Math.random() - 0.5) * 2;
+        const offsetLng = (jitterKm / (111 * Math.max(0.5, Math.cos((town.lat * Math.PI) / 180)))) * (Math.random() - 0.5) * 2;
+
+        const lat = town.lat + offsetLat;
+        const lng = town.lng + offsetLng;
+
+        const result = provider === 'kartaview'
+          ? await checkKartaViewCoverage({ lat, lng })
+          : provider === 'mapillary'
+            ? await checkMapillaryCoverage({ lat, lng })
+            : await checkStreetViewCoverage(lat, lng);
+
+        if (result.found) {
+          if (gameId) markTownUsed(gameId, town.name);
+          return { lat: result.lat, lng: result.lng, continent, panoId: result.panoId || null };
+        }
+      }
+    }
+  }
+
+  // Fallback: use hardcoded cities or random coordinates
   let cityData = null;
   if (noRandomLocations) {
     cityData = getCityForRegion(region);
@@ -87,23 +142,17 @@ async function getRandomStreetViewLocation(region = 'world', maxAttempts, noRand
   for (let i = 0; i < actualAttempts; i++) {
     let lat;
     let lng;
+
     if (noRandomLocations && cityData) {
       const freshCity = getCityForRegion(region);
       const cityResult = findNearbyCityLocation(region, freshCity);
       if (cityResult) {
         lat = cityResult.lat;
         lng = cityResult.lng;
-      } else {
-        const p = sampleKartaViewCandidateLatLng(region);
-        if (p) {
-          lat = p.lat;
-          lng = p.lng;
-        } else {
-          lat = bounds.minLat + Math.random() * (bounds.maxLat - bounds.minLat);
-          lng = bounds.minLng + Math.random() * (bounds.maxLng - bounds.minLng);
-        }
       }
-    } else if (provider === 'kartaview' || provider === 'mapillary') {
+    }
+
+    if (!lat || !lng) {
       const p = sampleKartaViewCandidateLatLng(region);
       if (p) {
         lat = p.lat;
@@ -112,9 +161,15 @@ async function getRandomStreetViewLocation(region = 'world', maxAttempts, noRand
         lat = bounds.minLat + Math.random() * (bounds.maxLat - bounds.minLat);
         lng = bounds.minLng + Math.random() * (bounds.maxLng - bounds.minLng);
       }
-    } else {
-      lat = bounds.minLat + Math.random() * (bounds.maxLat - bounds.minLat);
-      lng = bounds.minLng + Math.random() * (bounds.maxLng - bounds.minLng);
+    }
+
+    // For KartaView/Mapillary, use their specific logic
+    if (provider === 'kartaview' || provider === 'mapillary') {
+      const p = sampleKartaViewCandidateLatLng(region);
+      if (p) {
+        lat = p.lat;
+        lng = p.lng;
+      }
     }
 
     const result = provider === 'kartaview'
@@ -134,10 +189,10 @@ async function getRandomStreetViewLocation(region = 'world', maxAttempts, noRand
   throw new Error(`No Street View coverage found in region "${region}" after ${attempts} attempts.${hint}`);
 }
 
-async function getLocationsForGame(region, count, noRandomLocations = false) {
+async function getLocationsForGame(region, count, noRandomLocations = false, gameId = null) {
   const locations = [];
   for (let i = 0; i < count; i++) {
-    const loc = await getRandomStreetViewLocation(region, noRandomLocations ? 100 : 150, noRandomLocations);
+    const loc = await getRandomStreetViewLocation(region, noRandomLocations ? 100 : 150, noRandomLocations, gameId);
     locations.push(loc);
   }
   return locations;
@@ -150,4 +205,4 @@ function getRegions() {
   }));
 }
 
-module.exports = { getRandomStreetViewLocation, getLocationsForGame, getRegions };
+module.exports = { getRandomStreetViewLocation, getLocationsForGame, getRegions, clearUsedTowns };

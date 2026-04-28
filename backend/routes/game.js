@@ -3,7 +3,6 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { getLocationsForGame } = require('../models/locations');
-const { getRandomStreetViewLocation } = require('../models/locations');
 const { haversineDistance, calculateScore, calculateEarnedPoints } = require('../utils/scoring');
 
 const router = express.Router();
@@ -18,8 +17,8 @@ router.post('/create', optionalAuth, async (req, res) => {
   const validMode = validModes.includes(mode) ? mode : 'standard';
 
   try {
-    const locations = await getLocationsForGame(region, validRounds, noRandomLocations);
     const gameId = uuidv4();
+    const locations = await getLocationsForGame(region, validRounds, noRandomLocations, gameId);
     const db = getDb();
 
     // Check for active bonus on the user
@@ -112,7 +111,7 @@ router.post('/:gameId/guess', optionalAuth, (req, res) => {
     .run(nextRoundNum, score, gameId);
 
   const updatedGame = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
-  const isLastRound = nextRoundNum >= game.round_count;
+  const isLastRound = nextRoundNum >= updatedGame.round_count;
 
   // Peek next round location (includes pano_id for accurate Google Street View rendering)
   let nextRound = null;
@@ -142,6 +141,10 @@ router.post('/:gameId/finish', optionalAuth, (req, res) => {
 
   const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
+
+  // Clear used towns tracking for this game
+  const { clearUsedTowns } = require('../models/locations');
+  clearUsedTowns(gameId);
 
   db.prepare(`UPDATE games SET status='finished', finished_at=datetime('now') WHERE id=?`).run(gameId);
 

@@ -20,6 +20,7 @@ export default function Game() {
   const [totalScore, setTotalScore] = useState(0);
   const [currentRound, setCurrentRound] = useState(null);
   const startTimeRef = useRef(Date.now());
+  const initDone = useRef(false);
 
   const timeLimit = gameData?.timeLimit;
   const hasTimer = gameData?.mode !== 'notime' && timeLimit != null;
@@ -34,13 +35,24 @@ export default function Game() {
   );
 
   useEffect(() => {
-    if (gameData) return;
+    if (initDone.current) return;
+    initDone.current = true;
+
+    // Case 1: We have gameData from location.state (navigated from GameSetup)
+    if (location.state?.gameData?.currentRound) {
+      const cr = location.state.gameData.currentRound;
+      setCurrentRound({ roundNumber: cr.roundNumber, lat: cr.lat, lng: cr.lng, panoId: cr.panoId });
+      setLoading(false);
+      return;
+    }
+
+    // Case 2: No gameData, need to fetch from API
     api.get(`/game/${gameId}`).then((r) => {
       const { game, rounds } = r.data;
       const nextRoundNum = game.current_round + 1;
       const round = rounds.find((r) => r.round_number === nextRoundNum);
       if (!round) return navigate('/');
-      setGameData({
+      const newGameData = {
         gameId: game.id,
         totalRounds: game.round_count,
         timeLimit: game.mode !== 'notime' ? game.time_limit : null,
@@ -48,18 +60,13 @@ export default function Game() {
         region: game.region,
         activeBonus: game.active_bonus,
         continentHint: game.currentRound?.continentHint,
-        currentRound: { roundNumber: nextRoundNum, lat: round.actual_lat, lng: round.actual_lng, panoId: round.actual_pano_id },
-      });
+      };
+      setGameData(newGameData);
+      setCurrentRound({ roundNumber: nextRoundNum, lat: round.actual_lat, lng: round.actual_lng, panoId: round.actual_pano_id });
       setTotalScore(game.total_score);
       setLoading(false);
     }).catch(() => navigate('/'));
   }, []);
-
-  useEffect(() => {
-    if (!gameData) return;
-    setCurrentRound(gameData.currentRound);
-    setLoading(false);
-  }, [gameData]);
 
   useEffect(() => {
     if (!currentRound || !hasTimer) return;
@@ -106,22 +113,31 @@ export default function Game() {
   }
 
   async function handleContinue() {
-    if (result.isLastRound) {
+    if (!result || result.isLastRound) {
       await api.post(`/game/${gameId}/finish`);
       navigate(`/result/${gameId}`);
       return;
     }
-    setResult(null);
-    setGuess(null);
-    setCurrentRound({
+    if (!result.nextRound) {
+      console.error('No nextRound data! result:', result);
+      return;
+    }
+
+    const newRound = {
       roundNumber: result.nextRound.roundNumber,
       lat: result.nextRound.lat,
       lng: result.nextRound.lng,
       panoId: result.nextRound.panoId,
-    });
+    };
+
+    console.log('[DEBUG] Advancing to round:', newRound.roundNumber, 'from round:', currentRound?.roundNumber);
+
+    setResult(null);
+    setGuess(null);
+    setCurrentRound(newRound);
     setGameData((prev) => ({
       ...prev,
-      continentHint: result.continentHint,
+      continentHint: result.nextRound.continent,
     }));
   }
 
@@ -141,6 +157,7 @@ export default function Game() {
       {/* Street View - full screen */}
       <div className="absolute inset-0">
         <StreetView
+          key={`round-${currentRound.roundNumber}`}
           lat={currentRound.lat}
           lng={currentRound.lng}
           noPan={gameData?.mode === 'nopan'}

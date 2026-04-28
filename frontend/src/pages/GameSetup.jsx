@@ -178,7 +178,7 @@ export default function GameSetup() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-medium text-sm">Near Cities & Towns</div>
+                <div className="font-medium text-sm">Near Cities & Towns (Recommended)</div>
                 <div className="text-xs text-white/40 mt-0.5">Only pick locations within 3 miles of a village or city</div>
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
