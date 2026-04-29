@@ -27,8 +27,10 @@ function loadGoogleMaps() {
   return loadPromise;
 }
 
-export default function StreetView({ lat, lng, noPan = false, panoId = null, heading = null }) {
+export default function StreetView({ lat, lng, noPan = false, panoId = null, heading = null, onLoad }) {
   const [resolved, setResolved] = useState({ status: 'loading', provider: VITE_PROVIDER });
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
 
   useEffect(() => {
     let cancelled = false;
@@ -60,18 +62,21 @@ export default function StreetView({ lat, lng, noPan = false, panoId = null, hea
   }
 
   if (resolved.provider === 'kartaview') {
-    return <KartaViewStreetView lat={lat} lng={lng} noPan={noPan} />;
+    return <KartaViewStreetView lat={lat} lng={lng} noPan={noPan} onLoad={onLoadRef.current} />;
   }
 
   if (resolved.provider === 'mapillary') {
-    return <MapillaryStreetView lat={lat} lng={lng} noPan={noPan} meta={resolved.meta} />;
+    return <MapillaryStreetView lat={lat} lng={lng} noPan={noPan} meta={resolved.meta} onLoad={onLoadRef.current} />;
   }
 
-  return <GoogleStreetView lat={lat} lng={lng} noPan={noPan} panoId={panoId} heading={heading} />;
+  return <GoogleStreetView lat={lat} lng={lng} noPan={noPan} panoId={panoId} heading={heading} onLoad={onLoadRef.current} />;
 }
 
-function GoogleStreetView({ lat, lng, noPan = false, panoId = null, heading = null }) {
+function GoogleStreetView({ lat, lng, noPan = false, panoId = null, heading = null, onLoad }) {
   const containerRef = useRef(null);
+  const panoramaRef = useRef(null);
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
 
   useEffect(() => {
     if (!lat || !lng) return;
@@ -104,14 +109,56 @@ function GoogleStreetView({ lat, lng, noPan = false, panoId = null, heading = nu
         opts.pov = { heading, pitch: 0 };
       }
 
-      containerRef.current.innerHTML = '';
-      new window.google.maps.StreetViewPanorama(containerRef.current, opts);
+      // Reuse panorama instance or create new one
+      if (panoramaRef.current) {
+        panoramaRef.current.setOptions(opts);
+        if (panoId) {
+          panoramaRef.current.setPano(panoId);
+        } else {
+          panoramaRef.current.setPosition({ lat, lng });
+        }
+      } else {
+        containerRef.current.innerHTML = '';
+        const panorama = new window.google.maps.StreetViewPanorama(containerRef.current, opts);
+        panoramaRef.current = panorama;
+
+        // Handle WebGL context loss
+        const canvas = containerRef.current.querySelector('canvas');
+        if (canvas) {
+          canvas.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            console.warn('WebGL context lost, attempting to restore...');
+            setTimeout(() => {
+              if (!cancelled && containerRef.current) {
+                containerRef.current.innerHTML = '';
+                panoramaRef.current = null;
+                // Re-initialize
+                const newPanorama = new window.google.maps.StreetViewPanorama(containerRef.current, opts);
+                panoramaRef.current = newPanorama;
+              }
+            }, 1000);
+          });
+        }
+
+        if (onLoadRef.current) {
+          panorama.addListener('pano_changed', () => {
+            if (!cancelled) onLoadRef.current();
+          });
+        }
+      }
     });
 
     return () => {
       cancelled = true;
     };
   }, [lat, lng, noPan, panoId, heading]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      panoramaRef.current = null;
+    };
+  }, []);
 
   if (!GOOGLE_API_KEY || GOOGLE_API_KEY === 'your_google_maps_api_key_here') {
     return (
@@ -128,11 +175,13 @@ function GoogleStreetView({ lat, lng, noPan = false, panoId = null, heading = nu
   return <div ref={containerRef} className="w-full h-full street-view-container" />;
 }
 
-function KartaViewStreetView({ lat, lng, noPan = false }) {
+function KartaViewStreetView({ lat, lng, noPan = false, onLoad }) {
   const containerRef = useRef(null);
   const [state, setState] = useState({ status: 'idle' });
   const dragRef = useRef({ dragging: false, startX: 0, startPos: 0 });
   const [bgPos, setBgPos] = useState(0);
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
 
   const key = useMemo(() => {
     if (!lat || !lng) return null;
@@ -155,6 +204,7 @@ function KartaViewStreetView({ lat, lng, noPan = false }) {
           return;
         }
         setState({ status: 'ready', pano: r.data });
+        if (onLoadRef.current) onLoadRef.current();
       })
       .catch(() => {
         if (!cancelled) setState({ status: 'error' });
@@ -260,10 +310,14 @@ function KartaViewStreetView({ lat, lng, noPan = false }) {
 import { Viewer } from 'mapillary-js';
 import 'mapillary-js/dist/mapillary.css';
 
-function MapillaryStreetView({ lat, lng, noPan = false, meta = null }) {
+function MapillaryStreetView({ lat, lng, noPan = false, meta = null, onLoad }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   const [state, setState] = useState({ status: 'idle' });
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
+  const loadedRef = useRef(false);
+  const retryCountRef = useRef(0);
 
   const key = useMemo(() => {
     if (!lat || !lng) return null;
@@ -293,7 +347,36 @@ function MapillaryStreetView({ lat, lng, noPan = false, meta = null }) {
   useEffect(() => {
     if (state.status !== 'ready' || !containerRef.current) return;
 
-    if (!viewerRef.current) {
+    // Clean up previous viewer
+    if (viewerRef.current) {
+      viewerRef.current.remove();
+      viewerRef.current = null;
+      loadedRef.current = false;
+    }
+
+    loadedRef.current = false;
+    retryCountRef.current = 0;
+
+    function createViewer() {
+      if (!containerRef.current) return;
+
+      // Handle WebGL context loss
+      const canvas = containerRef.current.querySelector('canvas');
+      if (canvas) {
+        canvas.addEventListener('webglcontextlost', (e) => {
+          e.preventDefault();
+          console.warn('Mapillary WebGL context lost, recreating viewer...');
+          if (viewerRef.current) {
+            viewerRef.current.remove();
+            viewerRef.current = null;
+          }
+          retryCountRef.current += 1;
+          if (retryCountRef.current <= 2) {
+            setTimeout(createViewer, 1000);
+          }
+        });
+      }
+
       viewerRef.current = new Viewer({
         accessToken: import.meta.env.VITE_MAPILLARY_ACCESS_TOKEN,
         container: containerRef.current,
@@ -305,14 +388,32 @@ function MapillaryStreetView({ lat, lng, noPan = false, meta = null }) {
           sequence: !noPan,
         },
       });
-    } else {
-      viewerRef.current.moveTo(state.imageId).catch(() => {});
+      viewerRef.current.on('loaded', () => {
+        if (!loadedRef.current && onLoadRef.current) {
+          loadedRef.current = true;
+          onLoadRef.current();
+        }
+      });
+      viewerRef.current.on('error', () => {
+        if (retryCountRef.current <= 2) {
+          retryCountRef.current += 1;
+          console.warn('Mapillary viewer error, retrying...');
+          if (viewerRef.current) {
+            viewerRef.current.remove();
+            viewerRef.current = null;
+          }
+          setTimeout(createViewer, 1000);
+        }
+      });
     }
+
+    createViewer();
 
     return () => {
       if (viewerRef.current) {
         viewerRef.current.remove();
         viewerRef.current = null;
+        loadedRef.current = false;
       }
     };
   }, [state.imageId]);

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://egapi.arc360hub.com/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://192.168.4.41:3001/api',
 });
 
 // Attach JWT token from localStorage via zustand persist

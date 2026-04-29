@@ -25,10 +25,11 @@ function initDb() {
       points INTEGER DEFAULT 0,
       total_games INTEGER DEFAULT 0,
       best_score INTEGER DEFAULT 0,
-      daily_streak INTEGER DEFAULT 0,
-      last_daily_date TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
+       daily_streak INTEGER DEFAULT 0,
+       last_daily_date TEXT,
+       show_on_leaderboard INTEGER DEFAULT 1,
+       created_at TEXT DEFAULT (datetime('now'))
+     );
 
     CREATE TABLE IF NOT EXISTS games (
       id TEXT PRIMARY KEY,
@@ -105,6 +106,7 @@ function initDb() {
   // Run migrations
   const migrations = [
     { name: 'add_continent_to_rounds', sql: 'ALTER TABLE rounds ADD COLUMN continent TEXT' },
+    { name: 'add_show_on_leaderboard', sql: 'ALTER TABLE users ADD COLUMN show_on_leaderboard INTEGER DEFAULT 1' },
   ];
 
   const getMigration = db.prepare('SELECT name FROM migrations WHERE name = ?');

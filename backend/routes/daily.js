@@ -171,7 +171,7 @@ router.get('/leaderboard', async (req, res) => {
       SELECT u.username, dr.total_score, dr.completed_at
       FROM daily_results dr
       JOIN users u ON u.id = dr.user_id
-      WHERE dr.date = ?
+      WHERE dr.date = ? AND u.show_on_leaderboard = 1
       ORDER BY dr.total_score DESC
       LIMIT 20
     `).all(date);

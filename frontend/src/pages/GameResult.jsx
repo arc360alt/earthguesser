@@ -4,6 +4,7 @@ import api from '../utils/api';
 import ScoreBar from '../components/ScoreBar';
 import { formatDistance, scoreColor } from '../utils/geo';
 import { useAuth } from '../hooks/useAuth';
+import useSettingsStore from '../store/settingsStore';
 
 export default function GameResult() {
   const { gameId } = useParams();
@@ -11,6 +12,7 @@ export default function GameResult() {
   const { isLoggedIn, refreshUser } = useAuth();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { units } = useSettingsStore();
 
   useEffect(() => {
     api.get(`/game/${gameId}`)
@@ -81,11 +83,11 @@ export default function GameResult() {
                   <span className="w-6 h-6 rounded-full bg-brand-card flex items-center justify-center text-xs font-bold border border-white/10">
                     {round.round_number}
                   </span>
-                  <span className="text-sm text-white/60">
-                    {round.distance_km != null
-                      ? formatDistance(round.distance_km)
-                      : 'No guess'}
-                  </span>
+                   <span className="text-sm text-white/60">
+                     {round.distance_km != null
+                       ? formatDistance(round.distance_km, units)
+                       : 'No guess'}
+                   </span>
                 </div>
                 <span className="font-bold text-sm" style={{ color: scoreColor(round.score) }}>
                   {round.score.toLocaleString()} pts

@@ -10,6 +10,7 @@ import DailyChallenge from './pages/DailyChallenge';
 import GameResult from './pages/GameResult';
 import Profile from './pages/Profile';
 import Shop from './pages/Shop';
+import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 
 function ProtectedRoute({ children }) {
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/game/:gameId" element={<Game />} />
           <Route path="/daily" element={<DailyChallenge />} />
           <Route path="/result/:gameId" element={<GameResult />} />
+          <Route path="/settings" element={<Settings />} />
           <Route
             path="/profile"
             element={

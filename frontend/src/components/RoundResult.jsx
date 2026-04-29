@@ -2,6 +2,7 @@ import React from 'react';
 import GuessMap from './GuessMap';
 import ScoreBar from './ScoreBar';
 import { formatDistance, scoreColor } from '../utils/geo';
+import useSettingsStore from '../store/settingsStore';
 
 export default function RoundResult({
   score,
@@ -16,6 +17,8 @@ export default function RoundResult({
   isLastRound,
   onContinue,
 }) {
+  const { units } = useSettingsStore();
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-brand-dark">
       {/* Full-screen result map */}
@@ -57,7 +60,7 @@ export default function RoundResult({
                 {score.toLocaleString()} points
               </h2>
               <p className="text-white/70 text-sm mt-0.5">
-                You were <span className="text-white font-semibold">{formatDistance(distanceKm)}</span> away
+                You were <span className="text-white font-semibold">{formatDistance(distanceKm, units)}</span> away
               </p>
             </div>
             <div className="text-right">

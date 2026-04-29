@@ -142,9 +142,10 @@ router.post('/:gameId/finish', optionalAuth, (req, res) => {
   const game = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
   if (!game) return res.status(404).json({ error: 'Game not found' });
 
-  // Clear used towns tracking for this game
-  const { clearUsedTowns } = require('../models/locations');
-  clearUsedTowns(gameId);
+  // Clear used towns and countries tracking for this game
+   const { clearUsedTowns, clearUsedCountries } = require('../models/locations');
+   clearUsedTowns(gameId);
+   clearUsedCountries(gameId);
 
   db.prepare(`UPDATE games SET status='finished', finished_at=datetime('now') WHERE id=?`).run(gameId);
 
@@ -197,8 +198,15 @@ router.post('/:gameId/reroll', async (req, res) => {
   if (!currentRound) return res.status(400).json({ error: 'No current round' });
 
   try {
-    const newLocation = await getRandomStreetViewLocation(game.region, 150, false);
-    
+    const newLocation = await getRandomStreetViewLocation(game.region, 150, false, gameId);
+
+    // Track the new country
+    const { markCountryUsed } = require('../models/locations');
+    const country = await require('../models/locations').getCountryFromCoords
+      ? await (await import('../models/locations.js')).getCountryFromCoords(newLocation.lat, newLocation.lng)
+      : null;
+    if (country) markCountryUsed(gameId, country);
+
     db.prepare(`
       UPDATE rounds SET actual_lat = ?, actual_lng = ?, actual_pano_id = ?
       WHERE id = ?

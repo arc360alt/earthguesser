@@ -9,6 +9,7 @@ router.get('/alltime', (req, res) => {
   const rows = db.prepare(`
     SELECT username, best_score, total_games, points, daily_streak
     FROM users
+    WHERE show_on_leaderboard = 1
     ORDER BY best_score DESC
     LIMIT 50
   `).all();
@@ -23,7 +24,7 @@ router.get('/daily', (req, res) => {
     SELECT u.username, dr.total_score, dr.completed_at
     FROM daily_results dr
     JOIN users u ON u.id = dr.user_id
-    WHERE dr.date = ?
+    WHERE dr.date = ? AND u.show_on_leaderboard = 1
     ORDER BY dr.total_score DESC
     LIMIT 50
   `).all(date);

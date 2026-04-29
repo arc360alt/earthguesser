@@ -51,7 +51,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', requireAuth, (req, res) => {
   const db = getDb();
   const user = db
-    .prepare('SELECT id, username, email, points, total_games, best_score, daily_streak, last_daily_date, created_at FROM users WHERE id = ?')
+    .prepare('SELECT id, username, email, points, total_games, best_score, daily_streak, last_daily_date, show_on_leaderboard, created_at FROM users WHERE id = ?')
     .get(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -60,6 +60,22 @@ router.get('/me', requireAuth, (req, res) => {
     .all(req.userId);
 
   res.json({ user, bonuses });
+});
+
+router.put('/settings', requireAuth, (req, res) => {
+  const { show_on_leaderboard } = req.body;
+  const db = getDb();
+
+  if (show_on_leaderboard !== undefined) {
+    db.prepare('UPDATE users SET show_on_leaderboard = ? WHERE id = ?')
+      .run(show_on_leaderboard ? 1 : 0, req.userId);
+  }
+
+  const user = db
+    .prepare('SELECT id, username, email, points, total_games, best_score, daily_streak, last_daily_date, show_on_leaderboard, created_at FROM users WHERE id = ?')
+    .get(req.userId);
+
+  res.json({ user });
 });
 
 module.exports = router;

@@ -19,20 +19,21 @@ export default function Navbar() {
         <span>Earth<span className="text-brand-green">Guesser</span></span>
       </Link>
 
-      <div className="hidden md:flex items-center gap-6 text-sm font-medium">
-        <Link to="/" className="text-white/70 hover:text-white transition-colors">Home</Link>
-        <Link to="/daily" className="text-white/70 hover:text-white transition-colors flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-brand-green inline-block"></span>
-          Daily Challenge
-        </Link>
-        <Link to="/play" className="text-white/70 hover:text-white transition-colors">Quick Play</Link>
-        {isLoggedIn && (
-          <>
-            <Link to="/shop" className="text-white/70 hover:text-white transition-colors">Shop</Link>
-            <Link to="/profile" className="text-white/70 hover:text-white transition-colors">Profile</Link>
-          </>
-        )}
-      </div>
+       <div className="hidden md:flex items-center gap-6 text-sm font-medium">
+         <Link to="/" className="text-white/70 hover:text-white transition-colors">Home</Link>
+         <Link to="/daily" className="text-white/70 hover:text-white transition-colors flex items-center gap-1">
+           <span className="w-2 h-2 rounded-full bg-brand-green inline-block"></span>
+           Daily Challenge
+         </Link>
+         <Link to="/play" className="text-white/70 hover:text-white transition-colors">Quick Play</Link>
+         <Link to="/settings" className="text-white/70 hover:text-white transition-colors">Settings</Link>
+         {isLoggedIn && (
+           <>
+             <Link to="/shop" className="text-white/70 hover:text-white transition-colors">Shop</Link>
+             <Link to="/profile" className="text-white/70 hover:text-white transition-colors">Profile</Link>
+           </>
+         )}
+       </div>
 
       <div className="flex items-center gap-3">
         {isLoggedIn ? (

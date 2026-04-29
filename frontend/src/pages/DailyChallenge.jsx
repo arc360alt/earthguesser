@@ -61,11 +61,16 @@ export default function DailyChallenge() {
   }
 
   useEffect(() => {
-    if (phase !== 'playing' || !locations.length) return;
-    resetTimer(DAILY_TIME);
-    startTimer();
-    startTimeRef.current = Date.now();
-    return () => stopTimer();
+    if (phase !== 'playing') return;
+    const timeout = setTimeout(() => {
+      resetTimer(DAILY_TIME);
+      startTimer();
+      startTimeRef.current = Date.now();
+    }, 2000);
+    return () => {
+      clearTimeout(timeout);
+      stopTimer();
+    };
   }, [roundIndex, phase]);
 
   function submitGuess(timedOut = false) {

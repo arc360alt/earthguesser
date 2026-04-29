@@ -13,7 +13,13 @@ export function calculateScore(distanceKm) {
   return Math.max(0, Math.min(5000, Math.round(5000 * Math.exp(-distanceKm / 2000))));
 }
 
-export function formatDistance(km) {
+export function formatDistance(km, units = 'km') {
+  if (units === 'mi') {
+    const mi = km * 0.621371;
+    if (mi < 0.5) return `${Math.round(km * 1000)} m`;
+    if (mi < 100) return `${mi.toFixed(1)} mi`;
+    return `${Math.round(mi).toLocaleString()} mi`;
+  }
   if (km < 1) return `${Math.round(km * 1000)} m`;
   if (km < 100) return `${km.toFixed(1)} km`;
   return `${Math.round(km).toLocaleString()} km`;

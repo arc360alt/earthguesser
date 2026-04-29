@@ -68,12 +68,18 @@ export default function Game() {
     }).catch(() => navigate('/'));
   }, []);
 
+  // Start timer 2 seconds after round changes
   useEffect(() => {
-    if (!currentRound || !hasTimer) return;
-    resetTimer(timeLimit);
-    startTimer();
-    startTimeRef.current = Date.now();
-    return () => stopTimer();
+    if (!hasTimer) return;
+    const timeout = setTimeout(() => {
+      resetTimer(timeLimit);
+      startTimer();
+      startTimeRef.current = Date.now();
+    }, 2000);
+    return () => {
+      clearTimeout(timeout);
+      stopTimer();
+    };
   }, [currentRound?.roundNumber]);
 
   async function submitGuess(timedOut = false) {
