@@ -16,6 +16,7 @@ export default function RoundResult({
   totalScore,
   isLastRound,
   onContinue,
+  regionRadar,
 }) {
   const { units } = useSettingsStore();
 
@@ -31,6 +32,7 @@ export default function RoundResult({
           guessLng={guessLng}
           disabled
           fullscreen
+          regionRadar={regionRadar}
         />
 
         {/* Legend */}
@@ -70,6 +72,14 @@ export default function RoundResult({
           </div>
 
           <ScoreBar score={score} />
+
+          {regionRadar && (
+            <div className="mt-3 flex items-center gap-2 text-sm bg-brand-green/10 border border-brand-green/30 rounded-lg px-3 py-2">
+              <span>🗺️</span>
+              <span className="text-brand-green font-semibold">Region Radar:</span>
+              <span className="text-white/80">{regionRadar}</span>
+            </div>
+          )}
 
           <button
             onClick={onContinue}

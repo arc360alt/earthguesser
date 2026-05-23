@@ -1,13 +1,11 @@
-const REGION_BOUNDS = {
-  world:         { minLat: -60,  maxLat: 75,  minLng: -180, maxLng: 180 },
-  europe:        { minLat: 35,   maxLat: 71,  minLng: -25,  maxLng: 40 },
-  north_america: { minLat: 15,   maxLat: 72,  minLng: -168, maxLng: -52 },
-  south_america: { minLat: -55,  maxLat: 13,  minLng: -82,  maxLng: -34 },
-  asia:          { minLat: 5,    maxLat: 55,  minLng: 60,   maxLng: 145 },
-  africa:        { minLat: -35,  maxLat: 37,  minLng: -18,  maxLng: 52 },
-  oceania:       { minLat: -47,  maxLat: -5,  minLng: 112,  maxLng: 180 },
-};
+'use strict';
 
+const { checkKartaViewCoverage } = require('../utils/kartaview');
+const { checkMapillaryCoverage } = require('../utils/mapillary');
+const { getGameplayStreetViewProvider } = require('../utils/activeStreetview');
+const { sampleCandidateBatch, getCountryContinent } = require('../utils/globalCityPool');
+
+// Region → continent label for the continent_hint bonus
 const CONTINENT_MAP = {
   world: null,
   europe: 'Europe',
@@ -18,52 +16,45 @@ const CONTINENT_MAP = {
   oceania: 'Oceania',
 };
 
-const { checkKartaViewCoverage } = require('../utils/kartaview');
-const { checkMapillaryCoverage } = require('../utils/mapillary');
-const { getGameplayStreetViewProvider } = require('../utils/activeStreetview');
-const { sampleKartaViewCandidateLatLng } = require('./kartaviewSeeds');
-const { getCityForRegion, findNearbyCityLocation, MAX_METERS_FROM_CITY } = require('../utils/nominatim');
-const { TOWNS_BY_REGION } = require('../data/towns');
-
-const usedTowns = new Map();
+// Per-game state for deduplication
 const usedCountries = new Map();
 
-function markTownUsed(gameId, townName) {
-  if (!usedTowns.has(gameId)) usedTowns.set(gameId, new Set());
-  usedTowns.get(gameId).add(townName);
-}
-
-function isTownUsed(gameId, townName) {
-  return usedTowns.get(gameId)?.has(townName) || false;
-}
-
-function clearUsedTowns(gameId) {
-  usedTowns.delete(gameId);
-}
-
-function markCountryUsed(gameId, countryName) {
+function markCountryUsed(gameId, country) {
+  if (!gameId || !country) return;
   if (!usedCountries.has(gameId)) usedCountries.set(gameId, new Set());
-  if (countryName) usedCountries.get(gameId).add(countryName);
+  usedCountries.get(gameId).add(country);
 }
 
-function isCountryUsed(gameId, countryName) {
-  if (!countryName) return false;
-  return usedCountries.get(gameId)?.has(countryName) || false;
+function isCountryUsed(gameId, country) {
+  if (!gameId || !country) return false;
+  return usedCountries.get(gameId)?.has(country) || false;
 }
 
 function clearUsedCountries(gameId) {
   usedCountries.delete(gameId);
 }
 
+// usedTowns kept for API compatibility with routes/game.js
+const usedTowns = new Map();
+function markTownUsed(gameId, name) {
+  if (!usedTowns.has(gameId)) usedTowns.set(gameId, new Set());
+  usedTowns.get(gameId).add(name);
+}
+function clearUsedTowns(gameId) {
+  usedTowns.delete(gameId);
+}
+
+// Soft reverse-geocode: just return the city name we already know from the pool.
+// Kept as a named export so routes that import it still work.
 async function getCountryFromCoords(lat, lng) {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const id = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=3&addressdetails=1`,
       { headers: { 'User-Agent': 'EarthGuesser/1.0' }, signal: controller.signal }
     );
-    clearTimeout(timeoutId);
+    clearTimeout(id);
     const data = await res.json();
     return data?.address?.country || null;
   } catch {
@@ -71,144 +62,146 @@ async function getCountryFromCoords(lat, lng) {
   }
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function checkStreetViewCoverage(lat, lng) {
+// Google Street View metadata coverage check
+async function checkGoogleCoverage(lat, lng) {
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return { found: false };
   try {
-    const url = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&radius=2000&key=${key}`;
-    const res = await fetch(url);
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 6000);
+    const url = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&radius=2000&source=outdoor&key=${key}`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
     const data = await res.json();
-    if (data.status === 'OK') {
-      if (data.location_type === 'indoor') return { found: false };
-      const copyright = data.copyright || '';
-      if (!copyright.includes('Google')) return { found: false };
-      return {
-        found: true,
-        lat: data.location.lat,
-        lng: data.location.lng,
-        panoId: data.pano_id || null
-      };
-    }
-    return { found: false };
+    if (data.status !== 'OK') return { found: false };
+    if (data.location_type === 'indoor') return { found: false };
+    return {
+      found: true,
+      lat: data.location.lat,
+      lng: data.location.lng,
+      panoId: data.pano_id || null,
+    };
   } catch {
     return { found: false };
   }
 }
 
-function getMaxAttempts() {
-  const n = Number(process.env.STREETVIEW_MAX_ATTEMPTS);
-  if (Number.isFinite(n) && n > 0) return Math.min(500, Math.floor(n));
-  return 150;
+/**
+ * Given a list of promises that each resolve to a result object or null,
+ * resolves with the first non-null value, or null if all fail/return null.
+ */
+function firstSuccess(promises) {
+  return new Promise((resolve) => {
+    let remaining = promises.length;
+    if (remaining === 0) { resolve(null); return; }
+    let resolved = false;
+
+    for (const p of promises) {
+      p.then((val) => {
+        remaining--;
+        if (val && !resolved) {
+          resolved = true;
+          resolve(val);
+        } else if (remaining === 0 && !resolved) {
+          resolve(null);
+        }
+      }).catch(() => {
+        remaining--;
+        if (remaining === 0 && !resolved) resolve(null);
+      });
+    }
+  });
 }
 
-async function getRandomStreetViewLocation(region, maxAttempts, noRandomLocations, gameId) {
-  const bounds = REGION_BOUNDS[region] || REGION_BOUNDS.world;
-  const continent = CONTINENT_MAP[region];
+// Number of candidates to check in parallel per batch, tuned per provider
+const BATCH_SIZE = { google: 8, mapillary: 6, kartaview: 4 };
+const MAX_BATCHES = 20; // hard cap before giving up
+
+/**
+ * Find a random location with actual street-imagery coverage for a region.
+ * Uses parallel coverage checks across multiple candidates per batch.
+ *
+ * @param {string}  region           - 'world' | 'europe' | ...
+ * @param {boolean} nearTown         - if true, stay within ~3 km of a town/city
+ * @param {string|null} gameId       - used for per-game country deduplication
+ */
+async function getRandomStreetViewLocation(region, nearTown, gameId) {
+  const continent = CONTINENT_MAP[region] ?? null;
   const { provider } = await getGameplayStreetViewProvider();
-  const attempts = maxAttempts || getMaxAttempts();
 
   async function checkCoverage(lat, lng) {
-    if (provider === 'kartaview') return await checkKartaViewCoverage({ lat, lng });
-    if (provider === 'mapillary') return await checkMapillaryCoverage({ lat, lng });
-    return await checkStreetViewCoverage(lat, lng);
+    if (provider === 'kartaview') return checkKartaViewCoverage({ lat, lng });
+    if (provider === 'mapillary') return checkMapillaryCoverage({ lat, lng });
+    return checkGoogleCoverage(lat, lng);
   }
 
-  // Use static town list
-  if (noRandomLocations) {
-    const towns = TOWNS_BY_REGION[region] || TOWNS_BY_REGION.world;
-    if (towns && towns.length > 0) {
-      const availableTowns = gameId
-        ? towns.filter((t) => !isTownUsed(gameId, t.name))
-        : towns;
+  const batchSize = BATCH_SIZE[provider] || 6;
+  const excludedCountries = gameId ? (usedCountries.get(gameId) || new Set()) : new Set();
 
-      const shuffled = [...availableTowns].sort(() => Math.random() - 0.5);
-      for (let i = 0; i < Math.min(5, shuffled.length); i++) {
-        const town = shuffled[i];
-        const jitterKm = Math.random() * MAX_METERS_FROM_CITY / 1000;
-        const offsetLat = (jitterKm / 111) * (Math.random() - 0.5) * 2;
-        const offsetLng = (jitterKm / (111 * Math.max(0.5, Math.cos((town.lat * Math.PI) / 180)))) * (Math.random() - 0.5) * 2;
-        const lat = town.lat + offsetLat;
-        const lng = town.lng + offsetLng;
+  for (let batch = 0; batch < MAX_BATCHES; batch++) {
+    const candidates = sampleCandidateBatch(region, batchSize, excludedCountries, nearTown);
 
-        const result = await checkCoverage(lat, lng);
-        if (result.found) {
-          if (gameId) {
-            const country = await getCountryFromCoords(result.lat, result.lng);
-            if (country && isCountryUsed(gameId, country)) continue;
-            markTownUsed(gameId, town.name);
-            markCountryUsed(gameId, country);
-          }
-          return { lat: result.lat, lng: result.lng, continent, panoId: result.panoId || null };
-        }
-      }
+    const winner = await firstSuccess(
+      candidates.map((c) =>
+        checkCoverage(c.lat, c.lng).then((r) => {
+          if (!r.found) return null;
+          // Enforce country dedup: skip if this country was already used in this game
+          if (gameId && isCountryUsed(gameId, c.country)) return null;
+          return {
+            lat: r.lat,
+            lng: r.lng,
+            panoId: r.panoId || null,
+            continent,
+            cityName: c.name,
+            country: c.country,
+          };
+        }).catch(() => null)
+      )
+    );
+
+    if (winner) {
+      markCountryUsed(gameId, winner.country);
+      // Use the city's actual continent rather than the game region label —
+      // critical for world-mode games where continent is null at the region level.
+      winner.continent = getCountryContinent(winner.country) || continent;
+      return winner;
     }
   }
 
-  let cityData = null;
-  if (noRandomLocations) {
-    cityData = getCityForRegion(region);
-    if (!cityData) noRandomLocations = false;
-  }
-
-  const actualAttempts = noRandomLocations ? Math.min(attempts, 100) : attempts;
-
-  for (let i = 0; i < actualAttempts; i++) {
-    let lat, lng;
-
-    if (noRandomLocations && cityData) {
-      const freshCity = getCityForRegion(region);
-      const cityResult = findNearbyCityLocation(region, freshCity);
-      if (cityResult) { lat = cityResult.lat; lng = cityResult.lng; }
-    }
-
-    if (!lat || !lng) {
-      const p = sampleKartaViewCandidateLatLng(region);
-      if (p) { lat = p.lat; lng = p.lng; }
-      else {
-        lat = bounds.minLat + Math.random() * (bounds.maxLat - bounds.minLat);
-        lng = bounds.minLng + Math.random() * (bounds.maxLng - bounds.minLng);
-      }
-    }
-
-    if (provider === 'kartaview' || provider === 'mapillary') {
-      const p = sampleKartaViewCandidateLatLng(region);
-      if (p) { lat = p.lat; lng = p.lng; }
-    }
-
-    const result = await checkCoverage(lat, lng);
-    if (result.found) {
-      if (gameId) {
-        const country = await getCountryFromCoords(result.lat, result.lng);
-        if (country && isCountryUsed(gameId, country)) continue;
-        markCountryUsed(gameId, country);
-      }
-      return { lat: result.lat, lng: result.lng, continent, panoId: result.panoId || null };
-    }
-    if (provider === 'kartaview') await sleep(20);
-  }
-
-  const hint = provider === 'kartaview' ? ' KartaView API may be saturated. Try again later or set MAPILLARY_ACCESS_TOKEN.' : '';
-  throw new Error(`No Street View coverage found in region "${region}" after ${attempts} attempts.${hint}`);
+  throw new Error(
+    `No street-view coverage found in region "${region}" after ${MAX_BATCHES} batches. ` +
+    `Provider: ${provider}. Try a different region or check your API credentials.`
+  );
 }
 
+/**
+ * Generate all locations for a game.
+ * Rounds are generated sequentially so per-game country dedup stays accurate,
+ * but each individual round uses parallel candidate checks for speed.
+ */
 async function getLocationsForGame(region, count, noRandomLocations, gameId) {
   const locations = [];
   for (let i = 0; i < count; i++) {
-    const loc = await getRandomStreetViewLocation(region, noRandomLocations ? 100 : 150, noRandomLocations, gameId);
+    const loc = await getRandomStreetViewLocation(region, noRandomLocations, gameId);
     locations.push(loc);
   }
   return locations;
 }
 
 function getRegions() {
-  return Object.keys(REGION_BOUNDS).map((key) => ({
+  return Object.keys(CONTINENT_MAP).map((key) => ({
     id: key,
     label: key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
   }));
 }
 
-module.exports = { getRandomStreetViewLocation, getLocationsForGame, getRegions, clearUsedTowns, clearUsedCountries, markCountryUsed, isCountryUsed, getCountryFromCoords };
+module.exports = {
+  getRandomStreetViewLocation,
+  getLocationsForGame,
+  getRegions,
+  clearUsedTowns,
+  clearUsedCountries,
+  markCountryUsed,
+  isCountryUsed,
+  getCountryFromCoords,
+};

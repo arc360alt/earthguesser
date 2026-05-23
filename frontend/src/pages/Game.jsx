@@ -104,6 +104,7 @@ export default function Game() {
         distanceKm: res.data.distanceKm,
         actualLat: res.data.actualLat,
         actualLng: res.data.actualLng,
+        actualContinent: res.data.actualContinent || null,
         guessLat: timedOut ? null : guessPayload.lat,
         guessLng: timedOut ? null : guessPayload.lng,
         roundNumber: res.data.roundNumber,
@@ -143,7 +144,8 @@ export default function Game() {
     setCurrentRound(newRound);
     setGameData((prev) => ({
       ...prev,
-      continentHint: result.nextRound.continent,
+      // continentHint is only present when the continent_hint bonus is active (set by backend)
+      continentHint: result.nextRound.continentHint || null,
     }));
   }
 
@@ -230,6 +232,7 @@ export default function Game() {
           totalScore={totalScore}
           isLastRound={result.isLastRound}
           onContinue={handleContinue}
+          regionRadar={gameData?.activeBonus === 'region_radar' ? result.actualContinent : null}
         />
       )}
     </div>

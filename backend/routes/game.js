@@ -2,7 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
-const { getLocationsForGame } = require('../models/locations');
+const { getLocationsForGame, getRandomStreetViewLocation } = require('../models/locations');
 const { haversineDistance, calculateScore, calculateEarnedPoints } = require('../utils/scoring');
 
 const router = express.Router();
@@ -119,7 +119,14 @@ router.post('/:gameId/guess', optionalAuth, (req, res) => {
     const nr = db
       .prepare('SELECT round_number, actual_lat, actual_lng, actual_pano_id, continent FROM rounds WHERE game_id = ? AND round_number = ?')
       .get(gameId, nextRoundNum + 1);
-    if (nr) nextRound = { roundNumber: nr.round_number, lat: nr.actual_lat, lng: nr.actual_lng, panoId: nr.actual_pano_id, continent: nr.continent };
+    if (nr) {
+      nextRound = { roundNumber: nr.round_number, lat: nr.actual_lat, lng: nr.actual_lng, panoId: nr.actual_pano_id };
+      // Only reveal the continent in the next-round payload when the continent_hint bonus is active.
+      // (Always storing it in the DB; never leaking it to non-bonus players.)
+      if (game.active_bonus === 'continent_hint') {
+        nextRound.continentHint = nr.continent;
+      }
+    }
   }
 
   res.json({
@@ -127,6 +134,9 @@ router.post('/:gameId/guess', optionalAuth, (req, res) => {
     distanceKm: Math.round(distanceKm),
     actualLat: round.actual_lat,
     actualLng: round.actual_lng,
+    // Always return the actual continent of the current round — the frontend only
+    // surfaces it visually when the player has the region_radar bonus.
+    actualContinent: round.continent || null,
     totalScore: updatedGame.total_score,
     roundNumber: nextRoundNum,
     isLastRound,
@@ -198,14 +208,8 @@ router.post('/:gameId/reroll', async (req, res) => {
   if (!currentRound) return res.status(400).json({ error: 'No current round' });
 
   try {
-    const newLocation = await getRandomStreetViewLocation(game.region, 150, false, gameId);
-
-    // Track the new country
-    const { markCountryUsed } = require('../models/locations');
-    const country = await require('../models/locations').getCountryFromCoords
-      ? await (await import('../models/locations.js')).getCountryFromCoords(newLocation.lat, newLocation.lng)
-      : null;
-    if (country) markCountryUsed(gameId, country);
+    // nearTown=false for reroll; country dedup is handled inside getRandomStreetViewLocation
+    const newLocation = await getRandomStreetViewLocation(game.region, false, gameId);
 
     db.prepare(`
       UPDATE rounds SET actual_lat = ?, actual_lng = ?, actual_pano_id = ?

@@ -5,7 +5,17 @@ const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 
 maptilersdk.config.apiKey = MAPTILER_KEY;
 
-export default function GuessMap({ onGuessChange, disabled = false, showResult = false, actualLat, actualLng, guessLat, guessLng, fullscreen = false }) {
+// Bounding boxes for region_radar highlight — [minLng, minLat, maxLng, maxLat]
+const REGION_BOUNDS = {
+  'Europe':        [-25, 34,  45,  72],
+  'North America': [-170, 14, -50, 74],
+  'South America': [-83, -57, -33, 14],
+  'Asia':          [25,  -5,  180, 78],
+  'Africa':        [-20, -38,  56, 40],
+  'Oceania':       [100, -52, 180,  6],
+};
+
+export default function GuessMap({ onGuessChange, disabled = false, showResult = false, actualLat, actualLng, guessLat, guessLng, fullscreen = false, regionRadar = null }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -50,6 +60,33 @@ export default function GuessMap({ onGuessChange, disabled = false, showResult =
       markerRef.current = null;
     };
   }, []);
+
+  // Draw region_radar bounding box when the bonus is active
+  useEffect(() => {
+    if (!showResult || !regionRadar || !mapRef.current) return;
+    const map = mapRef.current;
+    const bounds = REGION_BOUNDS[regionRadar];
+    if (!bounds) return;
+
+    const [minLng, minLat, maxLng, maxLat] = bounds;
+    const geojson = {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]],
+      },
+    };
+
+    const addRadar = () => {
+      if (map.getSource('region-radar')) return;
+      map.addSource('region-radar', { type: 'geojson', data: geojson });
+      map.addLayer({ id: 'region-radar-fill', type: 'fill', source: 'region-radar', paint: { 'fill-color': '#4caf50', 'fill-opacity': 0.12 } });
+      map.addLayer({ id: 'region-radar-line', type: 'line', source: 'region-radar', paint: { 'line-color': '#4caf50', 'line-width': 2, 'line-opacity': 0.6 } });
+    };
+
+    if (map.loaded()) addRadar();
+    else map.on('load', addRadar);
+  }, [showResult, regionRadar]);
 
   // Show result lines & markers
   useEffect(() => {

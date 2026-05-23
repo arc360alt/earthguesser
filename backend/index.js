@@ -12,6 +12,7 @@ const kartaviewRoutes = require('./routes/kartaview');
 const streetviewInfoRoutes = require('./routes/streetviewInfo');
 const mapillaryRoutes = require('./routes/mapillary');
 const { getConfiguredProvider, hasMapillaryToken, hasGoogleKey } = require('./utils/streetviewProvider');
+const { preload: preloadCityPool } = require('./utils/globalCityPool');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +41,8 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   const cfg = getConfiguredProvider();
   console.log(`EarthGuesser API running on http://localhost:${PORT}`);
+  // Preload city pool in background so first game has no cold-start delay
+  setImmediate(() => preloadCityPool());
   // eslint-disable-next-line no-console
   console.log(
     `[streetview] configured=${cfg} googleKey=${hasGoogleKey() ? 'yes' : 'no'} mapillaryToken=${hasMapillaryToken() ? 'yes' : 'no'}`

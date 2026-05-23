@@ -127,7 +127,21 @@ router.post('/submit', optionalAuth, async (req, res) => {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yStr = yesterday.toISOString().slice(0, 10);
-      const newStreak = user.last_daily_date === yStr ? user.daily_streak + 1 : 1;
+      let newStreak;
+      if (user.last_daily_date === yStr) {
+        newStreak = user.daily_streak + 1;
+      } else {
+        // Check for an unused streak_shield bonus before resetting
+        const shield = db
+          .prepare(`SELECT id FROM user_bonuses WHERE user_id = ? AND bonus_type = 'streak_shield' AND used = 0 LIMIT 1`)
+          .get(req.userId);
+        if (shield) {
+          db.prepare('UPDATE user_bonuses SET used = 1 WHERE id = ?').run(shield.id);
+          newStreak = Math.max(1, user.daily_streak); // shield absorbs the break
+        } else {
+          newStreak = 1;
+        }
+      }
 
       db.prepare(`
         INSERT INTO daily_results (id, user_id, date, total_score, round_scores)
