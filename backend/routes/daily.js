@@ -4,6 +4,7 @@ const { getDb } = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { getLocationsForGame } = require('../models/locations');
 const { haversineDistance, calculateScore, calculateEarnedPoints } = require('../utils/scoring');
+const { checkAndUnlockAchievements } = require('../utils/achievements');
 
 const router = express.Router();
 
@@ -144,9 +145,9 @@ router.post('/submit', optionalAuth, async (req, res) => {
       }
 
       db.prepare(`
-        INSERT INTO daily_results (id, user_id, date, total_score, round_scores)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(uuidv4(), req.userId, date, totalScore, JSON.stringify(roundScores));
+        INSERT INTO daily_results (id, user_id, date, total_score, mode, region, round_scores)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(uuidv4(), req.userId, date, totalScore, 'daily', 'world', JSON.stringify(roundScores));
 
       db.prepare(`
         UPDATE users SET
@@ -158,7 +159,12 @@ router.post('/submit', optionalAuth, async (req, res) => {
         WHERE id = ?
       `).run(earnedPoints, totalScore, newStreak, date, req.userId);
 
-      const updatedUser = db.prepare('SELECT daily_streak FROM users WHERE id = ?').get(req.userId);
+      const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+      const newAchievements = checkAndUnlockAchievements(db, req.userId, {
+        user: updatedUser,
+        game: { region: 'world', mode: 'daily' },
+        rounds: roundScores.map((r) => ({ score: r.score, distance_km: r.distanceKm })),
+      });
 
       return res.json({
         totalScore,
@@ -166,10 +172,11 @@ router.post('/submit', optionalAuth, async (req, res) => {
         roundScores,
         earnedPoints,
         dailyStreak: updatedUser.daily_streak,
+        newAchievements,
       });
     }
 
-    res.json({ totalScore, maxScore: DAILY_ROUNDS * 5000, roundScores, earnedPoints, dailyStreak: null });
+    res.json({ totalScore, maxScore: DAILY_ROUNDS * 5000, roundScores, earnedPoints, dailyStreak: null, newAchievements: [] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

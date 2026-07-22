@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import api from '../utils/api';
 
@@ -9,12 +9,14 @@ export default function Profile() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [dailyLeaderboard, setDailyLeaderboard] = useState([]);
   const [tab, setTab] = useState('alltime');
+  const [achievements, setAchievements] = useState(null);
 
   useEffect(() => {
     if (!isLoggedIn) { navigate('/login'); return; }
     refreshUser();
     api.get('/leaderboard/alltime').then((r) => setLeaderboard(r.data.leaderboard)).catch(() => {});
     api.get('/leaderboard/daily').then((r) => setDailyLeaderboard(r.data.leaderboard)).catch(() => {});
+    api.get('/achievements').then((r) => setAchievements(r.data)).catch(() => {});
   }, []);
 
   if (!user) return null;
@@ -46,6 +48,23 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      {/* Achievements summary */}
+      {achievements && (
+        <Link
+          to="/achievements"
+          className="card mb-6 flex items-center justify-between hover:border-white/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🏆</span>
+            <div>
+              <p className="font-semibold text-sm">Achievements</p>
+              <p className="text-white/40 text-xs">{achievements.unlockedCount} / {achievements.totalCount} unlocked</p>
+            </div>
+          </div>
+          <span className="text-white/40 text-sm">View all →</span>
+        </Link>
+      )}
 
       {/* Leaderboard */}
       <div className="card">

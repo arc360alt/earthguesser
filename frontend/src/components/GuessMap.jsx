@@ -15,11 +15,12 @@ const REGION_BOUNDS = {
   'Oceania':       [100, -52, 180,  6],
 };
 
-export default function GuessMap({ onGuessChange, disabled = false, showResult = false, actualLat, actualLng, guessLat, guessLng, fullscreen = false, regionRadar = null }) {
+export default function GuessMap({ onGuessChange, disabled = false, showResult = false, actualLat, actualLng, guessLat, guessLng, fullscreen = false, regionRadar = null, opponentGuess = null }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const actualMarkerRef = useRef(null);
+  const opponentMarkerRef = useRef(null);
   const lineRef = useRef(null);
   const [placed, setPlaced] = useState(false);
 
@@ -108,6 +109,14 @@ export default function GuessMap({ onGuessChange, disabled = false, showResult =
           .addTo(map);
       }
 
+      // Opponent's guess marker (purple) — duel round results
+      if (opponentMarkerRef.current) opponentMarkerRef.current.remove();
+      if (opponentGuess?.lat != null && opponentGuess?.lng != null) {
+        opponentMarkerRef.current = new maptilersdk.Marker({ color: '#7c3aed' })
+          .setLngLat([opponentGuess.lng, opponentGuess.lat])
+          .addTo(map);
+      }
+
       // Draw line between guess and actual
       if (guessLat && guessLng) {
         const sourceId = 'result-line';
@@ -140,11 +149,19 @@ export default function GuessMap({ onGuessChange, disabled = false, showResult =
             'line-dasharray': [3, 3],
           },
         });
+      }
 
-        // Fit map to show both points
+      // Fit map to show every point we have (actual, your guess, opponent's guess)
+      const points = [[actualLng, actualLat]];
+      if (guessLat && guessLng) points.push([guessLng, guessLat]);
+      if (opponentGuess?.lat != null && opponentGuess?.lng != null) points.push([opponentGuess.lng, opponentGuess.lat]);
+
+      if (points.length > 1) {
+        const lngs = points.map((p) => p[0]);
+        const lats = points.map((p) => p[1]);
         const bounds = new maptilersdk.LngLatBounds(
-          [Math.min(guessLng, actualLng), Math.min(guessLat, actualLat)],
-          [Math.max(guessLng, actualLng), Math.max(guessLat, actualLat)]
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)]
         );
         map.fitBounds(bounds, { padding: 80, maxZoom: 10, duration: 800 });
       } else {
@@ -157,7 +174,7 @@ export default function GuessMap({ onGuessChange, disabled = false, showResult =
     } else {
       map.on('load', showOnMap);
     }
-  }, [showResult, actualLat, actualLng, guessLat, guessLng]);
+  }, [showResult, actualLat, actualLng, guessLat, guessLng, opponentGuess]);
 
   if (!MAPTILER_KEY || MAPTILER_KEY === 'your_maptiler_api_key_here') {
     return (

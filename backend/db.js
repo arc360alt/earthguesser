@@ -81,6 +81,71 @@ function initDb() {
       FOREIGN KEY (date) REFERENCES daily_challenges(date)
     );
 
+    CREATE TABLE IF NOT EXISTS achievements (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      icon TEXT NOT NULL,
+      tier TEXT DEFAULT 'bronze'
+    );
+
+    CREATE TABLE IF NOT EXISTS user_achievements (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      achievement_id TEXT NOT NULL,
+      unlocked_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, achievement_id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (achievement_id) REFERENCES achievements(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS duels (
+      id TEXT PRIMARY KEY,
+      player1_id TEXT NOT NULL,
+      player2_id TEXT NOT NULL,
+      region TEXT NOT NULL,
+      round_count INTEGER NOT NULL,
+      current_round INTEGER DEFAULT 0,
+      player1_score INTEGER DEFAULT 0,
+      player2_score INTEGER DEFAULT 0,
+      winner_id TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now')),
+      finished_at TEXT,
+      FOREIGN KEY (player1_id) REFERENCES users(id),
+      FOREIGN KEY (player2_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS duel_rounds (
+      id TEXT PRIMARY KEY,
+      duel_id TEXT NOT NULL,
+      round_number INTEGER NOT NULL,
+      actual_lat REAL NOT NULL,
+      actual_lng REAL NOT NULL,
+      actual_pano_id TEXT,
+      p1_guess_lat REAL,
+      p1_guess_lng REAL,
+      p1_distance_km REAL,
+      p1_score INTEGER,
+      p1_time INTEGER,
+      p2_guess_lat REAL,
+      p2_guess_lng REAL,
+      p2_distance_km REAL,
+      p2_score INTEGER,
+      p2_time INTEGER,
+      FOREIGN KEY (duel_id) REFERENCES duels(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS shop_items (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      icon TEXT NOT NULL,
+      cost INTEGER NOT NULL,
+      bonus_type TEXT NOT NULL,
+      bonus_value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS user_bonuses (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -107,6 +172,7 @@ function initDb() {
   const migrations = [
     { name: 'add_continent_to_rounds', sql: 'ALTER TABLE rounds ADD COLUMN continent TEXT' },
     { name: 'add_show_on_leaderboard', sql: 'ALTER TABLE users ADD COLUMN show_on_leaderboard INTEGER DEFAULT 1' },
+    { name: 'add_round_scores_to_daily_results', sql: 'ALTER TABLE daily_results ADD COLUMN round_scores TEXT' },
   ];
 
   const getMigration = db.prepare('SELECT name FROM migrations WHERE name = ?');
@@ -126,6 +192,21 @@ function initDb() {
   }
 
   seedShopItems(db);
+  seedAchievements(db);
+}
+
+function seedAchievements(db) {
+  const existing = db.prepare('SELECT COUNT(*) as c FROM achievements').get();
+  if (existing.c > 0) return;
+
+  const { ACHIEVEMENTS } = require('./utils/achievements');
+  const insert = db.prepare(`
+    INSERT INTO achievements (id, name, description, icon, tier)
+    VALUES (@id, @name, @description, @icon, @tier)
+  `);
+  for (const a of ACHIEVEMENTS) {
+    insert.run(a);
+  }
 }
 
 function seedShopItems(db) {

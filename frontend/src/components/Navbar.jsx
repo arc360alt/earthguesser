@@ -26,9 +26,11 @@ export default function Navbar() {
            Daily Challenge
          </Link>
          <Link to="/play" className="text-white/70 hover:text-white transition-colors">Quick Play</Link>
+         <Link to="/achievements" className="text-white/70 hover:text-white transition-colors">Achievements</Link>
          <Link to="/settings" className="text-white/70 hover:text-white transition-colors">Settings</Link>
          {isLoggedIn && (
            <>
+             <Link to="/duel" className="text-white/70 hover:text-white transition-colors">Duel</Link>
              <Link to="/shop" className="text-white/70 hover:text-white transition-colors">Shop</Link>
              <Link to="/profile" className="text-white/70 hover:text-white transition-colors">Profile</Link>
            </>

@@ -121,8 +121,8 @@ export default function Game() {
 
   async function handleContinue() {
     if (!result || result.isLastRound) {
-      await api.post(`/game/${gameId}/finish`);
-      navigate(`/result/${gameId}`);
+      const res = await api.post(`/game/${gameId}/finish`);
+      navigate(`/result/${gameId}`, { state: { newAchievements: res.data.newAchievements } });
       return;
     }
     if (!result.nextRound) {

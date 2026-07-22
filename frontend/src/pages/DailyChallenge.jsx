@@ -4,6 +4,7 @@ import StreetView from '../components/StreetView';
 import GuessMap from '../components/GuessMap';
 import Timer from '../components/Timer';
 import RoundResult from '../components/RoundResult';
+import AchievementToast from '../components/AchievementToast';
 import { useTimer } from '../hooks/useTimer';
 import { calculateScore, haversineDistance } from '../utils/geo';
 import api from '../utils/api';
@@ -26,6 +27,7 @@ export default function DailyChallenge() {
   const [totalScore, setTotalScore] = useState(0);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [finalResult, setFinalResult] = useState(null);
+  const [newAchievements, setNewAchievements] = useState([]);
   const startTimeRef = useRef(Date.now());
 
   const handleTimeUp = useCallback(() => {
@@ -109,6 +111,7 @@ export default function DailyChallenge() {
           guesses: roundResult.guessesSnapshot,
         });
         setFinalResult(res.data);
+        setNewAchievements(res.data.newAchievements || []);
         setPhase('result');
         if (isLoggedIn) refreshUser();
       } catch (err) {
@@ -158,6 +161,7 @@ export default function DailyChallenge() {
     const pct = Math.round((finalResult.totalScore / finalResult.maxScore) * 100);
     return (
       <div className="flex-1 flex items-center justify-center px-4 py-10">
+        <AchievementToast achievements={newAchievements} />
         <div className="w-full max-w-md">
           <div className="text-center mb-6">
             <div className="text-5xl mb-3">🌍</div>

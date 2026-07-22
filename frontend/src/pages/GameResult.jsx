@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/api';
 import ScoreBar from '../components/ScoreBar';
+import AchievementToast from '../components/AchievementToast';
 import { formatDistance, scoreColor } from '../utils/geo';
 import { useAuth } from '../hooks/useAuth';
 import useSettingsStore from '../store/settingsStore';
@@ -9,10 +10,12 @@ import useSettingsStore from '../store/settingsStore';
 export default function GameResult() {
   const { gameId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isLoggedIn, refreshUser } = useAuth();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const { units } = useSettingsStore();
+  const newAchievements = location.state?.newAchievements || [];
 
   useEffect(() => {
     api.get(`/game/${gameId}`)
@@ -49,6 +52,7 @@ export default function GameResult() {
 
   return (
     <div className="flex-1 flex items-center justify-center px-4 py-10">
+      <AchievementToast achievements={newAchievements} />
       <div className="w-full max-w-xl">
         {/* Header */}
         <div className="text-center mb-8">

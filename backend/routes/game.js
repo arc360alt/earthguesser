@@ -4,6 +4,7 @@ const { getDb } = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { getLocationsForGame, getRandomStreetViewLocation } = require('../models/locations');
 const { haversineDistance, calculateScore, calculateEarnedPoints } = require('../utils/scoring');
+const { checkAndUnlockAchievements } = require('../utils/achievements');
 
 const router = express.Router();
 
@@ -162,8 +163,8 @@ router.post('/:gameId/finish', optionalAuth, (req, res) => {
   const rounds = db.prepare('SELECT * FROM rounds WHERE game_id = ? ORDER BY round_number').all(gameId);
   const earnedPoints = calculateEarnedPoints(game.total_score, game.round_count);
 
+  let newAchievements = [];
   if (req.userId) {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
     db.prepare(`
       UPDATE users SET
         total_games = total_games + 1,
@@ -171,6 +172,13 @@ router.post('/:gameId/finish', optionalAuth, (req, res) => {
         best_score = MAX(best_score, ?)
       WHERE id = ?
     `).run(earnedPoints, game.total_score, req.userId);
+
+    const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+    newAchievements = checkAndUnlockAchievements(db, req.userId, {
+      user: updatedUser,
+      game: { region: game.region, mode: game.mode, round_count: game.round_count },
+      rounds,
+    });
   }
 
   res.json({
@@ -179,6 +187,7 @@ router.post('/:gameId/finish', optionalAuth, (req, res) => {
     maxScore: game.round_count * 5000,
     rounds,
     earnedPoints,
+    newAchievements,
   });
 });
 
